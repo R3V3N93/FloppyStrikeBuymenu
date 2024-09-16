@@ -1,0 +1,106 @@
+#library "mouse"
+#import "zcommon.bcs"
+#import "acsutils.acs"
+#import "log.g.acs"
+
+#libdefine MOUSE_HUDMSG_ID INT_MIN
+
+// This is an on-screen mouse script written by wtg62.
+// I've written it so that it tries to match your operating system mouse sensitivity.
+// So mess with your mouse settings as you like!
+// No matter what you do, you won't experience awkward cursor movement in game!
+
+// Mouse's coordinates
+// Starting values don't matter that much, but I prefer it to start in the center of the screen.
+int mx = 0.5;
+int my = 0.5;
+
+// Pixels to move every tic when using keyboard to move cursor.
+int kbSpeed = 10.0;
+
+// Cursor graphic
+str cursorGraphic = "cursor";
+
+// Hud size. The numbers are big because I want a small cursor graphic.
+int HUDX = 1440;
+int HUDY = 1080;
+
+int mousex;
+int mousey;
+
+// This function will take any value from 0.0 to 1.0.
+// It will then convert it to a number between 0 and the "scale" variable.
+// It will return a fixed number.
+function int fixedToPixel(int x, int scale)
+{
+    // Here, I multiply 'x' by our scale to get the appropriate number.
+    // However, I must round down (basically truncate digits).
+    // The best way to do this is to shift our bits to the right, and back to the left.
+    // This effectively rounds down for us.
+    return (FixedMul(x,scale<<16)>>16)<<16;
+}
+
+//@public
+//@summary prefered to run inside a loop
+void OnScreenMouse()
+{
+    if(!IsClient()) //it is necessary to check if it is "SERVER" side now to throw exception.
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : I need to be run on clientside."));
+        return;
+    }
+
+    // Set up
+    SetHudSize(HUDX,HUDY,0); // I just use these numbers for a small cursor graphic.
+    SetFont(cursorGraphic); // Optional, but looks better than using a character such as "+" or "."
+
+    // We need to support keybinds for keyboard look.
+    // So let's check if we're using the keyboard or mouse, and then respond appropriately.
+    if(GetPlayerInput(-1,INPUT_BUTTONS) & (BT_LEFT|BT_RIGHT|BT_LOOKUP|BT_LOOKDOWN))
+    {
+        // Keyboard controlled cursor
+        // Should be slow enough for user to be able to precisely hover over stuff.
+        // 'kbSpeed' pixels per tic.
+        // I use our previously set hud size to make movement speed on both axes look the same.
+        if(GetPlayerInput(-1,INPUT_BUTTONS) & BT_LEFT)       mx -= kbSpeed/HUDX;
+        if(GetPlayerInput(-1,INPUT_BUTTONS) & BT_RIGHT)      mx += kbSpeed/HUDX;
+        if(GetPlayerInput(-1,INPUT_BUTTONS) & BT_LOOKUP)     my -= kbSpeed/HUDY;
+        if(GetPlayerInput(-1,INPUT_BUTTONS) & BT_LOOKDOWN)   my += kbSpeed/HUDY;
+    }
+    else
+    {
+        // So here's our mouse controlled cursor.
+        // Basically, these 2 variables below will take our player's yaw and pitch input and scale it.
+        // Input is scaled so that our in-game "cursor" movement accurately matches operating system mouse movement.
+        // 'pitchscale' is also basically multiplied by 2.
+        // Why? Because pitch input is 2x slower than yaw input.
+        int yawScale   = FixedDiv(2.5,FixedMul(GetCVar("m_yaw"),GetCVar("mouse_sensitivity")));
+        int pitchScale = FixedDiv(5.0,FixedMul(GetCVar("m_pitch"),GetCVar("mouse_sensitivity")));
+        
+        // Now we get our delta x and delta y. 'Delta' means 'change in'. So 'change in x', and 'change in y'.
+        // We'll use these to offset our current mouse position.
+        int dmx = -FixedMul(GetPlayerInput(-1,INPUT_YAW),yawScale);
+        int dmy = -FixedMul(GetPlayerInput(-1,INPUT_PITCH),pitchScale);
+        
+        // Apply our offsets.
+        mx += dmx;
+        my += dmy;
+    }
+    
+    // Clamp our mouse position, so our mouse doesn't go offscreen and into the abyss forever.
+    if(mx < 0)      mx = 0;
+    if(my < 0)      my = 0;
+    if(mx > 0.999)  mx = 0.999;
+    if(my > 0.999)  my = 0.999;
+    
+    // Time to display our cursor!
+    // I have to remember that we used the SetHudSize function.
+    // I can't use a value from 0.0 to 1.0 for our display coordinates.
+    // I have to use a value from 0.0 to 960.0 for x, and 0.0 to 600.0 for y.
+    // So that's why I have my fixedToPixel function defined above!
+    // I also have to add 0.1 to each of our coordinates.
+    // This signals to ZDoom I want the upper left corner of my image to be at the integer part of the coordinates.
+    mousex = fixedToPixel(mx,HUDX)+0.1;
+    mousey = fixedToPixel(my,HUDY)+0.1;
+    HudMessage(s:"a"; HUDMSG_PLAIN, MOUSE_HUDMSG_ID, CR_UNTRANSLATED, mousex, mousey, 0);
+}

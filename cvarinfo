@@ -1,0 +1,104 @@
+user int		feedback_hit_volume		=	50;
+user bool		feedback_hit			=	true;
+user int		feedback_hit_sound		=	0;
+
+user int		feedback_kill_volume	=	50;
+user bool		feedback_kill			=	true;
+user int		feedback_kill_sound		=	0;
+
+user int 		radio_voiceset 		= 0;
+user float 		radio_uialpha 		= 0.0;
+user bool		radio_toggleoff		= true;
+
+user int		announcer_volume	=	100;
+user bool		announcer_gamemode	=	true;
+user bool		announcer_playersleft	=	true;
+user bool		announcer_killcombos	=	true;
+user bool		announcer_headshot		=	true;
+user string 	announcer_killcombos_voice 		= "Floppy";
+user string 	announcer_headshot_voice 		= "unreal";
+
+user int	krby_boot_taunt		=	90;
+user int	krby_kill_taunt		=	100;
+user int	krby_reload_taunt	=	85;
+user int	krby_yeet_taunt		=	80;
+
+user bool	krby_standing		=	true;
+user bool	krby_crouch			=	false;
+
+user string cl_pfp	=	"0";
+//user bool cl_personalkillfeed = true;
+
+server noarchive /*cheat*/ bool sv_zh_debugfunctions = false;
+server bool sv_lobbyvotesdisable = false;
+server bool sv_dontswitchtolobby = false;
+server int 	sv_durationtillobby = 30;
+
+server bool gamechange_settings_showmaprotation = false;
+server bool gamechange_settings_continuewithoutmaprotation = false;
+
+
+//slms-wildcard.wad disabled
+server bool nowildcards = false;
+server bool no_ice = false;
+server bool no_ghouls = false;
+server bool no_nyan = false;
+server bool no_blue = false;
+server bool no_fog = false;
+server bool no_kidding = false;
+
+
+server bool sv_holiday_christmas = false;
+
+local bool cl_voip_showbox = true;
+local int cl_voip_x = 400;
+local int cl_voip_y = 350;
+local int cl_voip_w = 1280;
+local int cl_voip_h = 800;
+local int cl_voip_d = 40;
+
+local int cl_voip_pfpx = 0;
+local bool cl_voip_flip = false;
+local bool cl_voip_down = false;
+local bool cl_voip_names = true;
+
+local bool cl_voip_showself = false;
+
+local bool cl_hints	= true;
+
+server int sv_maxrounds = 5;
+
+server string 	game_mode = "Classic";
+server string 	game_lastmap = "FDG99";
+server int 		game_rounds = 0;
+server string	game_mode_cur	= "";
+
+
+// ACSUtils
+server bool acsutils_noerrors = false;
+
+// Logging
+
+// If `true`, debug messages are allowed to be shown.
+// This is not checked if the game is running offline.
+server noarchive bool sv_fdm_showdebugmessages = false;
+
+// The minimum log severity to show.
+// Defaults to 0 which is debug and higher.
+// 1 for info,
+// 2 for warning,
+// 3 for error,
+// 4 to show none.
+// Note that online games by default have debug messages disabled.
+user noarchive int cl_fdm_logSeverity = 4;
+
+
+//FOV related stuff
+user int ws_fov = 90;
+server noarchive int ws_maxfov = 120;
+server noarchive int ws_minfov = 90;
+user bool ws_fov_notification = false;
+
+
+// R3V3N93 : as the timer gets covered by 'opponents' and 'allies left' message, it will be elevated by default. if you don't want it's you can disable it by yourself.
+user bool cl_cs_timer_down = false;

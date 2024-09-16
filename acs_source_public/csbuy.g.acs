@@ -1,0 +1,58 @@
+// ----------------------------------------
+// THIS FILE IS AUTO-GENERATED.
+// Any modifications may be overwritten.
+// ----------------------------------------
+
+// This file has been automatically generated to maintain data/code consistency.
+// Manual changes could be lost during the next regeneration. It is advised not to modify this file directly.
+
+// Purpose:
+// This file serves as the base ACS file for the given library, exposing all public scripts/functions that you are allowed to use.
+// This file is generated automatically to ensure accuracy and avoid mistakes with missing/unimplemented scripts/functions.
+
+// Usage Guidelines:
+// - DO NOT manually edit this file unless you fully understand its purpose and structure.
+// - DO NOT manually expose public scripts/functions. There is no guarantee these scripts/functions persist in the next version.
+// - If changes are necessary, request modification of the source code and regenerate the file.
+// - Reach out to the developer for assistance with any concerns.
+
+#library "csbuy"
+
+/* Libdefines */
+
+
+/* Libdefines, generated from enums */
+
+#libdefine CONST_CSBUY_MAX_BTN  8
+#libdefine CSBUY_HUDMSG_ID_BG  -2000000000
+#libdefine CSBUY_HUDMSG_ID_WEAP_IMG  -2000000005
+#libdefine CSBUY_HUDMSG_ID_DESC  -2000000002
+#libdefine CSBUY_HUDMSG_ID_PRICE  -2000000003
+#libdefine CSBUY_HUDMSG_ID_BUTTON  -2000000010
+#libdefine CSBUY_HUDMSG_ID_CATEGORY_TITLE  -2000000004
+#libdefine CSBUY_HUDMSG_ID_WEAP_IMG_BG  -2000000001
+#libdefine CSBUY_HUDMSG_BTN_X  171
+#libdefine CSBUY_HUDMSG_BTN_X_END  503
+#libdefine CSBUY_HUDMSG_BTN_Y  261
+#libdefine CSBUY_HUDMSG_BTN_Y_END  305
+#libdefine CSBUY_HUDMSG_BTN_GAP  72
+#libdefine CSBUY_HUDMSG_WEAPBG_X 549.0
+#libdefine CSBUY_HUDMSG_WEAPBG_Y 261.0
+#libdefine CSBUY_HUDMSG_WEAPBG_X_LENGTH 675.0
+#libdefine CSBUY_HUDMSG_WEAPBG_Y_LENGTH 288.0
+
+/* Public methods */
+
+
+// Adds a slot
+function void CSBuy_AddSlot(int slotnum, int max_weapons) {}
+
+// Adds a category.
+function void CSBuy_AddCategory(str name, int slot) {}
+
+// Adds a weapon to a category.
+function void CSBuy_AddWeapon(int category, str displayname, str actorname, int price, str description, str image, bool ignore_category_slotmax) {}
+function void CSBuy_BuymenuSetup(str currency, str font) {}
+
+// Runs CS Buymenu with priorily setup informations.
+function void CSBuy_Buymenu(void) {}

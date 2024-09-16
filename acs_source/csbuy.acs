@@ -1,0 +1,709 @@
+#library "csbuy"
+#import "zcommon.bcs"
+#import "acsutils.acs"
+#import "log.g.acs"
+#import "mouse.acs"
+#nocompact
+
+//@todo adjustable text scale
+//@todo convert the whole code into strict fuckkkkkkkkkkkkkkkk
+//@todo sound
+
+enum CSBUY_CONST
+{
+    CONST_CSBUY_MAX_BTN = 8
+};
+
+enum CSBUY_HUDMSG
+{
+    CSBUY_HUDMSG_ID_BG = -2000000000,
+    CSBUY_HUDMSG_ID_WEAP_IMG = -2000000005,
+    CSBUY_HUDMSG_ID_DESC = -2000000002,
+    CSBUY_HUDMSG_ID_PRICE = -2000000003,
+    CSBUY_HUDMSG_ID_BUTTON = -2000000010,
+    CSBUY_HUDMSG_ID_CATEGORY_TITLE = -2000000004,
+    CSBUY_HUDMSG_ID_WEAP_IMG_BG = -2000000001,
+
+    CSBUY_HUDMSG_BTN_X = 171,
+    CSBUY_HUDMSG_BTN_X_END = 503,
+    CSBUY_HUDMSG_BTN_Y = 261,
+    CSBUY_HUDMSG_BTN_Y_END = 305,
+    CSBUY_HUDMSG_BTN_GAP = 72,
+
+    CSBUY_HUDMSG_WEAPBG_X = 549.0,
+    CSBUY_HUDMSG_WEAPBG_Y = 261.0,
+    CSBUY_HUDMSG_WEAPBG_X_LENGTH = 675.0,
+    CSBUY_HUDMSG_WEAPBG_Y_LENGTH = 288.0
+};
+
+Struct CsBuy
+{
+    //Item actor name to use as currency
+    str _currency;
+
+    //font.
+    str _font;
+
+    int _scalex;
+    int _scaley;
+
+    int _offsetx;
+    int _offsety;
+
+    bool _isActive;
+    bool _IsSetup;
+
+    // -1 can be input in order to close the buymenu
+    int _curcategory;
+
+    int _lasthover;
+};
+
+struct CsBuy _CSBuy;
+
+Struct Button
+{
+    // Name is the corresponding button's short, catchy identification.
+    // CSBUY_EMPTY_BTN can be used in order to specify this "button" to be blank(basically taking the space). Due to this, normal function for adding buttons shouldn't use CSBUY_EMPTY_BTN as name.
+    str _name;
+    str _msg;
+
+    // needed in order to implement custom button functionality
+    bool _clicked;
+    bool _hovering;
+};
+
+//First parameter for the array is category. 0 is for the main screen, and the rests are for respective corresponding category.
+struct Button _btn[CONST_CSBUY_MAX_BTN+1][CONST_CSBUY_MAX_BTN];
+
+Struct Category
+{
+    //I may not allow it to be empty.
+    str _name;
+
+    // slot used by this category
+    int _slotnum;
+    
+};
+
+struct Category _category[CONST_CSBUY_MAX_BTN];
+
+struct Slot
+{
+    //Value for how many weapons can be stored into corresponding type(e.g. having multiple grenades in grenade slots)
+    int _slotmax;
+};
+
+struct Slot _slot[10];
+
+Struct Weapons
+{
+    // Name to be displayed on the screen
+    str _displayname;
+
+    // Name of the weapon's ACTOR name
+    str _actorname;
+
+    int _price;
+
+    // Description for the weapon.
+    str _desc;
+
+    // Image to use for the weapon. Throws exception if it is none.
+    str _img;
+
+    //limit of how much can be bought(e.g. multiple flashbangs)
+    int _limit;
+
+    //checks whether to accept transaction regardless of _slotmax of a category
+    bool _Ignore_slotmax;
+};
+
+struct Weapons _weapons[CONST_CSBUY_MAX_BTN+1][CONST_CSBUY_MAX_BTN];
+
+function void CSBuy_SetHudSize(int x, int y, bool thatboolparam)
+{
+    SetHudSize(trunc(FixedDiv(x, _csbuy._scalex)), trunc(FixedDiv(y, _csbuy._scaley)), thatboolparam);
+    return;
+}
+
+function bool CSbuy_CheckClient(str func_or_script_name)
+{
+    if(!IsClient()) //it is necessary to check if it is "SERVER" side now to throw exception.
+    {
+        LogError(StrParam(s:func_or_script_name, s:" : I need to be run on clientside."));
+        return false;
+    }
+    
+    if(PlayerIsBot(ConsolePlayerNumber())) //it is necessary to check if it is "SERVER" side now to throw exception.
+    {
+        LogError(StrParam(s:func_or_script_name, s:" : CSBuy cancelled on bot(", d:PlayerNumber(), s:")"));
+        return false;
+    }
+
+    if(ConsolePlayerNumber() != PlayerNumber())
+    {
+        //LogError(StrParam(s:func_or_script_name, s:" : CSBuy cancelled on bot."));
+        return false;
+    }
+
+    return true;
+}    
+
+//@summary Sets up a button. Returns index where the button is located at. Returns 1337 if it errors. MUST BE RUN ON CLIENTSIDE! 
+function int CSBuy_BtnSetup(str msg, str name, int category)
+{
+    if(!CSbuy_checkclient(__FUNCTION__)){return 1337;}
+
+    if(name == "")
+    {
+        LogError(__FUNCTION__ + " : name parameter should not be blanked out!");
+        return 1337;
+    }
+
+    if(category > CONST_CSBUY_MAX_BTN || category < 0)
+    {
+        LogError(__FUNCTION__ + " : category parameter should be inbetween from 0 to 9.");
+        return 1337;
+    }
+
+    for(int i = 0; i < CONST_CSBUY_MAX_BTN; i++)
+    {
+        //duplicate check
+        if(StrCmp(_btn[category][i]._name, name) == 0 && StrCmp(_btn[category][i]._name, "CSBUY_EMPTY_BTN") != 0)
+        {
+            LogWarning(StrParam(s:__FUNCTION__, s:" : category [", d:category, s:"]", s:" already has item ", s:name, s:". Canceling button addition."));
+            return 1337;
+        }
+    }
+
+    for(int j = 0; j < CONST_CSBUY_MAX_BTN; j++)
+    {
+        
+        if(StrCmp(_btn[category][j]._name, "") == 0)
+        {
+            _btn[category][j]._msg = msg;
+            _btn[category][j]._name = name;
+
+            LogDebug(StrParam(s:__FUNCTION__, s:" : msg = ", s:_btn[category][j]._msg, s:" name = ", s:_btn[category][j]._name, s:" button has successfully been added to category [", d:category, s:"][", d:j, s:"]"));
+            return j;
+        }
+    }
+
+    LogWarning(StrParam(s:__FUNCTION__, s:" : category [", d:category, s:"]", s:"is full. Canceling button addition."));
+    return 1337;
+}
+
+//@summary Checks if a button is clicked or not. Used inside button scripts.
+function bool CSBuy_CheckBtnClicked(int category, int btn)
+{
+    return _btn[category][btn]._clicked;
+}
+
+//@public
+//@summary Adds a slot
+function void CSBuy_AddSlot(int slotnum, int max_weapons)
+{
+    if(!CSbuy_checkclient(__FUNCTION__)){return;}
+
+    if(slotnum < 0 || slotnum > 9)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : type parameter should be inbetween 0~9"));
+        return;
+    }
+
+    if(max_weapons < 1)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : max_weapons parameter should start at least 1"));
+        return;
+    }
+
+    if(_slot[slotnum]._slotmax != 0)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : slot ", d:slotnum, s:" is already defined!"));
+        return;
+    }
+
+    LogDebug(StrParam(s:__FUNCTION__, s:" : slotnum = ", d:slotnum, s:" max_weapons = ", d:max_weapons));
+    _slot[slotnum]._slotmax = max_weapons;
+}
+
+//@public
+//@summary Adds a category.
+function void CSBuy_AddCategory(str name, int slot) 
+{
+    if(!CSbuy_checkclient(__FUNCTION__)) {return;}
+
+    if(name == "")
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : name parameter should not be blanked out!"));
+        return;
+    }
+
+    if(slot < 0 || slot > 9)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : slot parameter should be inbetween 0~9"));
+        return;
+    }
+
+    if(_slot[slot]._slotmax == 0)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : Undefined slot ", d:slot, s:". Configure the slot priorily using \ckCSBuy_AddSlot()\c-."));
+        return;
+    }
+
+    
+    for(int i = 0; i < CONST_CSBUY_MAX_BTN; i++)
+    {
+        //duplicate check
+        if(StrCmp(_category[i]._name, name) == 0 && StrCmp(_category[i]._name, "CSBUY_EMPTY_BTN") != 0)
+        {
+            LogWarning(StrParam(s:__FUNCTION__, s:" : category [", d:i, s:"]", s:" already has item ", s:name, s:". Canceling category addition."));
+            return;
+        }
+    }
+
+    for(int j = 0; j < CONST_CSBUY_MAX_BTN; j++)
+    {
+        if(StrCmp(_category[j]._name, "") == 0)
+        {
+            _category[j]._name = name;
+            _category[j]._slotnum = slot;
+            CSBuy_BtnSetup(name, name, 0);
+            LogDebug(StrParam(s:__FUNCTION__, s:" : name = ", s:name, s:" slot = ", d:slot, s:" category[", d:j, s:"] has been successfully created."));
+            return;
+        }
+    }
+
+    LogWarning(StrParam(s:__FUNCTION__, s:" : No category vacancy remaining. canceling the process"));
+    return;  
+}
+
+//@public
+//@summary Adds a weapon to a category.
+function void CSBuy_AddWeapon(int category, str displayname, str actorname, int price, str description, str image, bool ignore_category_slotmax) 
+{
+    int _index;
+
+    if(category < 1 || category > CONST_CSBUY_MAX_BTN)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : invalid category ", d:category, s:" category parameter needs to be 1~8"));
+        return;
+    }
+
+    if(price < 0)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : invalid category ", d:category, s:" category parameter needs to be 0~8"));
+        return;
+    }
+
+    if(displayname == "")
+    {
+        LogError(__FUNCTION__ + " : displayname parameter should not be blanked out!");
+        return;
+    }
+
+    if(actorname == "")
+    {
+        LogError(__FUNCTION__ + " : actorname parameter should not be blanked out!");
+        return;
+    }
+
+    /*if(buylimit < 0)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : invalid buylimit ", d:buylimit, s:" buylimit parameter needs to be at least 1"));
+        return;
+    }*/
+
+    if(!CSbuy_checkclient(__FUNCTION__)) {return;}
+    for(int i = 0; i < CONST_CSBUY_MAX_BTN; i++)
+    {
+        //duplicate check
+        if(StrCmp(_weapons[category][_index]._actorname, actorname) == 0)
+        {
+            LogWarning(StrParam(s:__FUNCTION__, s:" : category [", d:category, s:"]'s button[", d:i, s:"] already has weapon ", s:actorname, s:". Canceling category addition."));
+            return;
+        }
+    }
+
+    for(; _index < CONST_CSBUY_MAX_BTN; _index++)
+    {
+        if(StrCmp(_weapons[category][_index]._actorname, "") == 0)
+        {
+            _weapons[category][_index]._displayname = displayname;
+            _weapons[category][_index]._actorname = actorname;
+            _weapons[category][_index]._price = price;
+            _weapons[category][_index]._desc = description;
+            _weapons[category][_index]._img = image;
+            _weapons[category][_index]._Ignore_slotmax = ignore_category_slotmax;
+            CSBuy_BtnSetup(displayname, actorname, category);
+            LogDebug(StrParam(s:__FUNCTION__, s:" : \ndisplayname = ", s:_weapons[category][_index]._displayname, s:" \nactorname = ", s:_weapons[category][_index]._actorname, s:" \nprice = ", d:_weapons[category][_index]._price, s:" \ndesc = ", s:_weapons[category][_index]._desc, s:" \nimg = ", s:_weapons[category][_index]._img,  s:" \nweapon[", d:category, s:"][", d:_index, s:"] has been successfully created.\n"));
+            return;
+        }
+    }
+
+    LogWarning(StrParam(s:__FUNCTION__, s:" : No weapon for category[", d:category, s:"] vacancy remaining. canceling the process"));
+    return;
+    
+}
+
+//@public
+function void CSBuy_BuymenuSetup(str currency, str font)
+{
+    if(!CSbuy_checkclient(__FUNCTION__)) {return;}
+
+    for(int k = 0; k < CONST_CSBUY_MAX_BTN; k++)
+    {
+        _category[k]._name = "";
+        _category[k]._slotnum = 0;
+    }
+
+    for(int l = 0; l < 10; l++)
+    {
+        _slot[l]._slotmax = 0;
+    }
+
+    for(int i = 0; i < CONST_CSBUY_MAX_BTN+1; i++)
+    {
+        for(int j = 0; j < CONST_CSBUY_MAX_BTN; j++)
+        {
+            _btn[i][j]._name = "";
+            _btn[i][j]._msg = "";
+            _btn[i][j]._clicked = false;
+            _btn[i][j]._hovering = false;
+            _weapons[i][j]._displayname = "";
+            _weapons[i][j]._actorname = "";
+            _weapons[i][j]._price = 0;
+            _weapons[i][j]._desc = "";
+            _weapons[i][j]._img = "";
+        }
+    }
+
+    LogDebug(StrParam(s:__FUNCTION__, s:" : Struct Setup Complete"));
+
+    _CSBuy._currency = currency;
+    _CSBuy._font = font;
+
+    _CSBuy._IsSetup = true;
+
+    LogDebug(StrParam(s:__FUNCTION__, s:" : currency = ", s:currency, s:" font = ", s:font));
+}
+
+//@public
+//@summary Runs CS Buymenu with priorily setup informations.
+function void CSBuy_Buymenu()
+{
+    if(!CSbuy_checkclient(__FUNCTION__)) {return;}
+
+    if(ConsolePlayerNumber() != PlayerNumber())
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : Script running this function's activator should be same as ConsolePlayerNumber"));
+        return;
+    }
+
+    if(_CSBuy._IsSetup == false)
+    {
+        LogError(StrParam(s:__FUNCTION__, s:" : You need to configure the menu with \ckCSBuy_BuymenuSetup() \c-first"));
+        return;
+    }
+
+    if(_csbuy._isActive == true)
+    {
+        return;
+    }
+
+    NamedRequestScriptPuke("CSBuy_Freezer", 1);
+    ACS_NamedExecute("CSBuy_Buymenu_init", 0);
+}
+
+function void CS_BuyDrawButton(int category, int button)
+{
+    if(StrICmp(_btn[category][button]._name, "CSBUY_EMPTY_BTN") == 0 || StrICmp(_btn[category][button]._name, "") == 0)
+    {
+        return;
+    }
+    SetHudSize(1440, 1080, false);
+    SetFont((_btn[category][button]._hovering == true && _weapons[category][button]._price <= CheckInventory(_csbuy._currency) ? "CSBUYBTH" : "CSBUYBTN"));
+    HudMessage(s:"A"; HUDMSG_PLAIN|HUDMSG_ALPHA, CSBUY_HUDMSG_ID_BUTTON - button - 10, CR_UNTRANSLATED, CSBUY_HUDMSG_BTN_X * 1.0 + 0.1, (CSBUY_HUDMSG_BTN_Y + CSBUY_HUDMSG_BTN_GAP * button) * 1.0 + 0.1, 0, 0.5);
+    SetHudSize(2880, 2160, false);
+    SetFont(_csbuy._font);
+    HudMessage(s:StrParam(d:button + 1, s: " ", s:_btn[category][button]._msg); HUDMSG_PLAIN|HUDMSG_ALPHA, CSBUY_HUDMSG_ID_BUTTON - button, CR_YELLOW, CSBUY_HUDMSG_BTN_X * 2.0 + 30.1, (CSBUY_HUDMSG_BTN_Y + CSBUY_HUDMSG_BTN_GAP * button) * 2.0 + 45.0, 0, (_weapons[category][button]._price <= CheckInventory(_csbuy._currency) ? 1.0 : 0.5));   
+    _btn[category][button]._hovering = false;
+}
+
+function int CSBuy_CheckMouseClick()
+{
+    for(int i = 0; i < CONST_CSBUY_MAX_BTN; i++)
+    {
+        if(mousex >= CSBUY_HUDMSG_BTN_X * 1.0 && mousex <= CSBUY_HUDMSG_BTN_X_END * 1.0)
+        {
+            if(mousey >= 855.0 && mousey <= 899.0)
+            {
+                if(KeyPressed(BT_ATTACK))
+                {
+                    //if cancel button was pressed at main menu
+                    if(_csbuy._curcategory == 0)
+                    {
+                        _csbuy._curcategory = -1;
+                        LogDebug(StrParam(s:__FUNCTION__, s:" : Exiting buymenu"));
+                        return 1;
+                    }
+                    _csbuy._lasthover = 0;
+                    _csbuy._curcategory = 0;
+                    return 0;
+                }       
+            }   
+            if(StrCmp(_btn[_csbuy._curcategory][i]._name, "CSBUY_EMPTY_BTN") != 0 && StrCmp(_btn[_csbuy._curcategory][i]._name, "") != 0)
+            { 
+                if(mousey >= (CSBUY_HUDMSG_BTN_Y + CSBUY_HUDMSG_BTN_GAP * i) * 1.0 && mousey <= (CSBUY_HUDMSG_BTN_Y_END + CSBUY_HUDMSG_BTN_GAP * i) * 1.0)
+                {
+                    _btn[_csbuy._curcategory][i]._hovering = true;
+                    if(StrCmp(_btn[_csbuy._curcategory][i]._name, "") != 0 && StrCmp(_btn[_csbuy._curcategory][i]._name, "CSBUY_EMPTY_BTN") != 0)
+                        _csbuy._lasthover = i;
+
+                    if(KeyPressed(BT_ATTACK))
+                    {
+                        _btn[_csbuy._curcategory][i]._clicked = true;
+                        LogDebug(StrParam(s:__FUNCTION__, s:" : Activated Button", s:_btn[_csbuy._curcategory][i]._name, s:"([", d:_csbuy._curcategory, s:"][", d:i, s:"])"));
+                        return 0;
+                    }
+                }
+            }    
+        }      
+    }
+    
+    return 0;   
+}
+
+function void CSBuy_CheckButton()
+{
+    for(int i = 0; i < CONST_CSBUY_MAX_BTN; i++)
+    {
+        if(_btn[_csbuy._curcategory][i]._clicked == true)
+        {
+            //if at main buy menu
+            if(_csbuy._curcategory == 0)
+            {
+                //if button is category
+                if(StrCmp(_btn[_csbuy._curcategory][i]._name, _category[i]._name) == 0)
+                {
+                    _csbuy._lasthover = 0;
+                    _btn[_csbuy._curcategory][i]._clicked = false;
+                    _csbuy._curcategory = i + 1;
+                    
+                    LogDebug(StrParam(s:__FUNCTION__, s:" : category has been changed to ", d:i+1));
+                    return;
+                }
+            }
+            else
+            {
+                //if button is weapon
+                if(StrCmp(_btn[_csbuy._curcategory][i]._name, _weapons[_csbuy._curcategory][i]._actorname) == 0)
+                {
+                    _btn[_csbuy._curcategory][i]._clicked = false;
+                    if(CheckInventory(_CSBuy._currency) >= _weapons[_csbuy._curcategory][i]._price)
+                    {   
+                        if(CheckInventory(_weapons[_csbuy._curcategory][i]._actorname) >= 1)
+                        {
+                            SetHudSize(0, 0, FALSE);
+                            SetFont("SMALLFONT");
+                            Print(s:"You already own the weapon");
+                            _csbuy._curcategory = -1;
+                            return;
+                        }
+                        LogDebug(StrParam(s:__FUNCTION__, s:" : successfully bought weapon[", d:_csbuy._curcategory, s:"][", d:i, s:"]"));
+                        PlaySound(0, "gun_buy", CHAN_AUTO);
+                        NamedSendNetworkString("CSBuy_Purchase", StrParam(s:_weapons[_csbuy._curcategory][i]._actorname, s:"|", s:_csbuy._currency, s:"@", d:_weapons[_csbuy._curcategory][i]._price));
+                        str thing_2_take = CSBuy_CheckSlot(i);
+                        NamedSendNetworkString("CSBuy_TakeInventory", thing_2_take);
+
+                        _csbuy._curcategory = -1;
+                    }
+                    else if(CheckInventory(_CSBuy._currency) < _weapons[_csbuy._curcategory][i]._price)
+                    {
+                        LogDebug(StrParam(s:__FUNCTION__, s:" : unable to buy weapon[", d:_csbuy._curcategory, s:"][", d:i, s:"] of price tag ", d:_weapons[_csbuy._curcategory][i]._price, s:" with money ", d:CheckInventory(_CSBuy._currency)));
+                    }
+                    return;
+                }
+            }
+            return;
+        }   
+    }
+}
+
+function void CSBuy_ClearScreen()
+{
+    ClearHudMessage(MOUSE_HUDMSG_ID);
+    ClearHudMessage(CSBUY_HUDMSG_ID_BG);
+    ClearHudMessage(CSBUY_HUDMSG_ID_WEAP_IMG);
+    ClearHudMessage(CSBUY_HUDMSG_ID_DESC);
+    ClearHudMessage(CSBUY_HUDMSG_ID_PRICE);
+    ClearHudMessage(CSBUY_HUDMSG_ID_WEAP_IMG_BG);
+    ClearHudMessage(CSBUY_HUDMSG_ID_CATEGORY_TITLE);
+    for(int i = 0; i <= CONST_CSBUY_MAX_BTN + 1; i++)
+    {
+        ClearHudMessage(CSBUY_HUDMSG_ID_BUTTON - i - 10);
+        ClearHudMessage(CSBUY_HUDMSG_ID_BUTTON - i);
+    }
+}
+
+Script "CSBuy_Buymenu_init" (void) CLIENTSIDE
+{
+    _CSBuy._isActive = True;
+    LogDebug(StrParam(s:__SCRIPT__, s:" : Init debug"));
+    While(_CSBuy._isActive == True)
+    {   
+        CSBuy_ClearScreen();
+        OnScreenMouse();
+        CSBuy_CheckMouseClick();
+        CSBuy_CheckButton();
+
+        if(_csbuy._curcategory == -1)
+        {
+            _CSBuy._isActive = false;
+            _csbuy._curcategory = 0;
+            CSBuy_ClearScreen();
+            ClearHudMessage(MOUSE_HUDMSG_ID);
+
+            NamedRequestScriptPuke("CSBuy_Freezer", 0);
+            terminate;
+        }
+        
+    
+        SetHudSize(1440, 1080, false);
+        SetFont("CSBUY_BG");
+        HudMessage(s:"A"; HUDMSG_PLAIN, CSBUY_HUDMSG_ID_BG, CR_UNTRANSLATED, 720.0, 540.0, 0);
+        SetFont(_csbuy._font);
+        HudMessage(s:(_csbuy._curcategory == 0 ? "Buy Menu" : _category[_csbuy._curcategory - 1]._name); HUDMSG_PLAIN, CSBUY_HUDMSG_ID_CATEGORY_TITLE, CR_YELLOW, 174.1, 80.1, 0);
+
+        SetFont("CSBUYBTN");
+        HudMessage(s:"A"; HUDMSG_PLAIN|HUDMSG_ALPHA, CSBUY_HUDMSG_ID_BUTTON - 9, CR_UNTRANSLATED, CSBUY_HUDMSG_BTN_X * 1.0 + 0.1, 855.1, 0, 0.5);
+        SetHudSize(2880, 2160, false);
+        SetFont(_csbuy._font);
+        HudMessage(s:"0 CANCEL"; HUDMSG_PLAIN, CSBUY_HUDMSG_ID_BUTTON - 19, CR_YELLOW, CSBUY_HUDMSG_BTN_X * 2.0 + 30.1, 1755.0, 0);
+
+        for(int j = 0; j < CONST_CSBUY_MAX_BTN; j++)
+        {
+            CS_BuyDrawButton(_csbuy._curcategory, j);
+        }
+
+        //Weapon descriptions
+        if(_csbuy._curcategory != 0 && StrCmp(_btn[_csbuy._curcategory][0]._name, "") != 0)
+        {
+            SetHudSize(1440, 1080, false);
+            SetFont("CSBUYWBG");
+            HudMessage(s:"A"; HUDMSG_PLAIN|HUDMSG_ALPHA, CSBUY_HUDMSG_ID_WEAP_IMG_BG, CR_UNTRANSLATED, CSBUY_HUDMSG_WEAPBG_X + 0.1, CSBUY_HUDMSG_WEAPBG_Y + 0.1, 0, 0.5); 
+
+            SetHudSize(645, 484, false);
+            SetFont((!CheckFont(_weapons[_csbuy._curcategory][_csbuy._lasthover]._img) ? "CSBUYNWP" : _weapons[_csbuy._curcategory][_csbuy._lasthover]._img));
+            HudMessage(s:"A"; HUDMSG_PLAIN|HUDMSG_ALPHA, CSBUY_HUDMSG_ID_WEAP_IMG, CR_UNTRANSLATED, trunc(FixedDiv(CSBUY_HUDMSG_WEAPBG_X + FixedDiv(CSBUY_HUDMSG_WEAPBG_X_LENGTH,2.0), 2.23)), trunc(FixedDiv(CSBUY_HUDMSG_WEAPBG_Y + FixedDiv(CSBUY_HUDMSG_WEAPBG_Y_LENGTH,2.0), 2.23)), 0); 
+
+            SetHudSize(2880, 2160, false);
+            SetFont(_csbuy._font);
+            HudMessage(s:"PRICE : ", s:(_weapons[_csbuy._curcategory][_csbuy._lasthover]._price == 0 ? "FREE" : StrParam(d:_weapons[_csbuy._curcategory][_csbuy._lasthover]._price, s:"$")); HUDMSG_PLAIN, CSBUY_HUDMSG_ID_PRICE, CR_YELLOW, FixedMul(CSBUY_HUDMSG_WEAPBG_X + 4.0,2.0) + 0.1, FixedMul(CSBUY_HUDMSG_WEAPBG_Y + CSBUY_HUDMSG_WEAPBG_Y_LENGTH + 18.0,2.0) + 0.1, 0); 
+            
+            HudMessage(s:_weapons[_csbuy._curcategory][_csbuy._lasthover]._desc; HUDMSG_PLAIN, CSBUY_HUDMSG_ID_DESC, CR_YELLOW, FixedMul(CSBUY_HUDMSG_WEAPBG_X + 4.0,2.0) + 0.1, FixedMul(CSBUY_HUDMSG_WEAPBG_Y + CSBUY_HUDMSG_WEAPBG_Y_LENGTH + 50.0,2.0) + 0.1, 0); 
+        } 
+
+        Delay(1);
+    }
+}
+
+Script "CSBuy_Freezer" (int whatto) NET
+{
+    SetPlayerProperty(0, whatto, PROP_TOTALLYFROZEN);
+    LogDebug(StrParam(s:__SCRIPT__, s:" : ", s:(whatto == 0 ? "Unfrozed player" : "Froze player")));
+}
+
+//returns true if player is already carrying maximum amount of weapons for the slot 
+function str CSBuy_CheckSlot(int curwep)
+{
+    if(_csbuy._curcategory == 0)
+    {
+        LogWarning(StrParam(s:__FUNCTION__, s:" : I was run from main buy menu. Please let me be at other categories"));
+        return "err_xdddddddddddddddddddddddddddd";
+    }
+
+    if(_weapons[_csbuy._curcategory][curwep]._Ignore_slotmax == true)
+    {
+        LogDebug(StrParam(s:__FUNCTION__, s:" : current weapon ignores _slotmax"));
+        return "nominal_xddddddddddddddddddddddddddddd";
+    }
+
+    str lastly_checked_weapon;
+    int counteditem = 0;
+    //used in order to point out duplicated weapons in the check
+    str checked_weapon[(CONST_CSBUY_MAX_BTN - 1) * CONST_CSBUY_MAX_BTN];
+
+    for(int j = 0; j < CONST_CSBUY_MAX_BTN; j++)
+    {
+        LogDebug(StrParam(s:__FUNCTION__, s:" : j = ", d:j, s:" _category[_csbuy._curcategory - 1]._slotnum = ", d:_category[_csbuy._curcategory - 1]._slotnum));
+        if(_category[j]._slotnum == _category[_csbuy._curcategory -1]._slotnum)
+        {
+            for(int i = 0; i < CONST_CSBUY_MAX_BTN; i++)
+            {
+                LogDebug(StrParam(s:__FUNCTION__, s:" : i = ", d:i));
+                if(_weapons[j + 1][i]._Ignore_slotmax == false)
+                {
+                    LogDebug(StrParam(s:__FUNCTION__, s:" : _weapons[j][i]._actorname = ", s:_weapons[j + 1][i]._actorname, s:" CheckInventory(_weapons[j + 1][i]._actorname) = ", d:CheckInventory(_weapons[j + 1][i]._actorname)));
+                    if(CheckInventory(_weapons[j + 1][i]._actorname) >= 1)
+                    {
+                        bool l = false;
+                        for(int k = 0; k < CONST_CSBUY_MAX_BTN * CONST_CSBUY_MAX_BTN; k++)
+                        {
+                            if(checked_weapon[k] == _weapons[j + 1][i]._actorname)
+                            {
+                                l = true;
+                            }
+                        }
+                        
+                        if(l == false)
+                        {
+                            checked_weapon[j * i + i] = _weapons[j + 1][i]._actorname;
+                            lastly_checked_weapon = _weapons[j + 1][i]._actorname;
+                            LogDebug(StrParam(s:__FUNCTION__, s:" : lastly_checked_weapon = ", s:lastly_checked_weapon));
+                            counteditem++;
+                        }    
+                    }       
+                }
+            }
+        }
+    }
+    
+
+    LogDebug(StrParam(s:__FUNCTION__, s:" : counteditem = ", d:counteditem, s:" _slot[_category[_csbuy._curcategory - 1]._slotnum]._slotmax = ", d:_slot[_category[_csbuy._curcategory - 1]._slotnum]._slotmax, s:" _category[_csbuy._curcategory - 1]._slotnum = ", d:_category[_csbuy._curcategory - 1]._slotnum));
+    if(counteditem >= _slot[_category[_csbuy._curcategory - 1]._slotnum]._slotmax)
+    {
+        LogDebug(StrParam(s:__FUNCTION__, s:" : Slot is full, returning ", s:lastly_checked_weapon));
+        return lastly_checked_weapon;
+    }
+    LogDebug(StrParam(s:__FUNCTION__, s:" : Slot is not full"));
+    return "nominal_xddddddddddddddddddddddddddddd";
+}
+
+Script "CSBuy_Purchase" (int string) NET
+{
+    StrSplit(string, "|");
+    str giveweapon = r1;
+    str secondsplitee = r2;
+    StrSplit(secondsplitee, "@");
+    str currency = r1;
+    int price = atoi(r2);
+
+
+    GiveInventory(giveweapon, 1);
+    TakeInventory(currency, price);
+    SetWeapon(giveweapon);
+} 
+
+Script "CSBuy_TakeInventory" (int string) NET
+{
+    if(StrCmp(string, "err_xdddddddddddddddddddddddddddd") == 0 || StrCmp(string, "nominal_xddddddddddddddddddddddddddddd") == 0)
+    {
+        LogActivator(StrParam(s:__SCRIPT__, s:" : canceling myself"));
+        terminate;
+    }
+
+    LogActivator(StrParam(s:__SCRIPT__, s:" : Removed ", s:string));
+    TakeInventory(string, INT_MAX);
+}
