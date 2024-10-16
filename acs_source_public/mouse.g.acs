@@ -20,7 +20,7 @@
 
 /* Libdefines */
 
-#libdefine MOUSE_HUDMSG_ID INT_MIN
+#libdefine MOUSE_HUDMSG_ID INT_MIN
 
 /* Libdefines, generated from enums */
 

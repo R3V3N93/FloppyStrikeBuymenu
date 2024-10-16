@@ -56,3 +56,6 @@ function void CSBuy_BuymenuSetup(str currency, str font) {}
 
 // Runs CS Buymenu with priorily setup informations.
 function void CSBuy_Buymenu(void) {}
+
+// Exits CS Buymenu
+function void CSBuy_Terminate(void) {}

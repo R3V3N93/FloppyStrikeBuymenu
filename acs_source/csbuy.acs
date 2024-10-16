@@ -547,6 +547,14 @@ function void CSBuy_ClearScreen()
     }
 }
 
+//@public
+//@summary Exits CS Buymenu
+function void CSBuy_Terminate()
+{
+    _csbuy._curcategory = -1;
+    LogDebug(StrParam(s:__FUNCTION__, s:" : Exiting buymenu"));
+}
+
 Script "CSBuy_Buymenu_init" (void) CLIENTSIDE
 {
     _CSBuy._isActive = True;
@@ -700,10 +708,10 @@ Script "CSBuy_TakeInventory" (int string) NET
 {
     if(StrCmp(string, "err_xdddddddddddddddddddddddddddd") == 0 || StrCmp(string, "nominal_xddddddddddddddddddddddddddddd") == 0)
     {
-        LogActivator(StrParam(s:__SCRIPT__, s:" : canceling myself"));
+        //LogActivator(StrParam(s:__SCRIPT__, s:" : canceling myself"));
         terminate;
     }
 
-    LogActivator(StrParam(s:__SCRIPT__, s:" : Removed ", s:string));
+    //LogDebug(StrParam(s:__SCRIPT__, s:" : Removed ", s:string));
     TakeInventory(string, INT_MAX);
 }
